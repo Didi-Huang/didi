@@ -518,3 +518,82 @@ def m_Ab(x, y, m):
         Ab[i][-1] = np.sum(y * x**i)      # b部分：y * x^i
 
     return Ab
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Tektronix CSV パース（信号とノイズ実験, 2026-07）
+# ═══════════════════════════════════════════════════════════════════
+
+def parse_tek_csv(path, probe_atten=1.0):
+    """
+    Tektronix TBS1022 CSV → time[s], voltage[V].
+
+    5/6/7列のカラム数を自動判定。値は既にプローブ補正済みのため
+    通常 probe_atten=1.0 で使用する。
+    """
+    from pathlib import Path
+    path = Path(path)
+    with open(path, encoding="utf-8-sig") as f:
+        lines = f.readlines()
+
+    ncols = 5
+    for line in lines:
+        parts = line.strip().split(",")
+        if len(parts) >= 5 and parts[0].strip() == "" and parts[1].strip() == "":
+            ncols = len(parts)
+            break
+
+    t_col = 4 if ncols >= 7 else 3
+    v_col = 5 if ncols >= 7 else 4
+
+    times, volts = [], []
+    for line in lines:
+        parts = line.strip().split(",")
+        if len(parts) < ncols:
+            continue
+        if parts[0].strip() == "" and parts[1].strip() == "":
+            try:
+                times.append(float(parts[t_col]))
+                volts.append(float(parts[v_col]))
+            except (ValueError, IndexError):
+                continue
+
+    return np.array(times, dtype=float), np.array(volts, dtype=float) * probe_atten
+
+
+def parse_tek_csv_sweep(path):
+    """
+    掃引データ用 Tektronix CSV → frequency[Hz], lockin_output[V].
+
+    DATALOGGING モード: CH1=周波数測定値, CH2=Lock-in出力電圧。
+    6列なら col4/col5, 7列なら col5/col6 を読む。
+    """
+    from pathlib import Path
+    path = Path(path)
+    with open(path, encoding="utf-8-sig") as f:
+        lines = f.readlines()
+
+    ncols = 5
+    for line in lines:
+        parts = line.strip().split(",")
+        if len(parts) >= 5 and parts[0].strip() == "" and parts[1].strip() == "":
+            ncols = len(parts)
+            break
+
+    f_col = 5 if ncols >= 7 else 4
+    v_col = 6 if ncols >= 7 else 5
+
+    freq, volt = [], []
+    for line in lines:
+        parts = line.strip().split(",")
+        if len(parts) < ncols:
+            continue
+        if parts[0].strip() == "" and parts[1].strip() == "":
+            try:
+                if parts[f_col].strip() and parts[v_col].strip():
+                    freq.append(float(parts[f_col]))
+                    volt.append(float(parts[v_col]))
+            except (ValueError, IndexError):
+                continue
+
+    return np.array(freq), np.array(volt)
